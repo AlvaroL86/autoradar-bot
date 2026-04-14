@@ -16,6 +16,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import sys
+import traceback
 
 # ============================================================
 # CONFIGURACIÓN
@@ -150,6 +151,7 @@ def guardar_en_supabase(coches):
         return True
     except Exception as e:
         print(f"❌ Error Supabase: {e}")
+        traceback.print_exc()
         return False
 
 # ============================================================
@@ -159,10 +161,12 @@ def guardar_en_supabase(coches):
 def enviar_email_resumen(total_coches, portales_count):
     """Envía email con resumen"""
     if not GMAIL_USER or not GMAIL_PASS or not GMAIL_TO:
-        print("⚠️ Email no configurado")
+        print("⚠️ Email no configurado (falta GMAIL_USER, GMAIL_PASS o GMAIL_TO)")
         return False
     
     try:
+        print(f"\n📧 Intentando enviar email desde {GMAIL_USER}...")
+        
         hoy = datetime.now().strftime('%d/%m/%Y')
         asunto = f'🚗 AutoRadar - {total_coches} coches nuevos ({hoy})'
         
@@ -190,14 +194,35 @@ def enviar_email_resumen(total_coches, portales_count):
         mensaje['Subject'] = asunto
         mensaje.attach(MIMEText(cuerpo, 'html'))
         
+        print(f"  📤 Conectando a smtp.gmail.com:465...")
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as servidor:
+            print(f"  🔐 Autenticando como {GMAIL_USER}...")
             servidor.login(GMAIL_USER, GMAIL_PASS)
+            print(f"  ✅ Autenticación exitosa")
+            print(f"  📬 Enviando mensaje...")
             servidor.send_message(mensaje)
         
         print(f"✅ Email enviado a {GMAIL_TO}")
         return True
+        
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"❌ ERROR DE AUTENTICACIÓN: {e}")
+        print(f"   Posibles causas:")
+        print(f"   1. Contraseña incorrecta")
+        print(f"   2. Tienes 2FA activado y debes usar App Password")
+        print(f"   3. Gmail bloqueó el acceso")
+        print(f"\n   Para generar una App Password:")
+        print(f"   👉 https://myaccount.google.com/apppasswords")
+        return False
+        
+    except smtplib.SMTPException as e:
+        print(f"❌ Error SMTP: {e}")
+        traceback.print_exc()
+        return False
+        
     except Exception as e:
-        print(f"❌ Error email: {e}")
+        print(f"❌ Error email desconocido: {e}")
+        traceback.print_exc()
         return False
 
 # ============================================================
@@ -208,6 +233,14 @@ def main():
     print("=" * 60)
     print("🚗 AutoRadar Bot - Web Scraper")
     print("=" * 60)
+    
+    # Verificar configuración
+    print("\n📋 Verificando configuración:")
+    print(f"  ✅ SUPABASE_URL: {'✓' if SUPABASE_URL else '❌ FALTA'}")
+    print(f"  ✅ SUPABASE_KEY: {'✓' if SUPABASE_KEY else '❌ FALTA'}")
+    print(f"  ✅ GMAIL_USER: {'✓' if GMAIL_USER else '❌ FALTA'}")
+    print(f"  ✅ GMAIL_PASS: {'✓' if GMAIL_PASS else '❌ FALTA'}")
+    print(f"  ✅ GMAIL_TO: {'✓' if GMAIL_TO else '❌ FALTA'}")
     
     # Determinar qué portales raspar hoy
     dia = datetime.now().day
@@ -228,6 +261,8 @@ def main():
     # Guardar en Supabase
     if todos_los_coches:
         guardar_en_supabase(todos_los_coches)
+    else:
+        print("⚠️ No se extrajeron datos")
     
     # Enviar email
     enviar_email_resumen(len(todos_los_coches), len(portales_hoy))
